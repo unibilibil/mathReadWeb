@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互动式微积分学习指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background-color: #F8F5F2;
+            color: #434242;
+        }
+        .active-nav {
+            background-color: #7A9D96;
+            color: white;
+            transform: translateX(5px);
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+        }
+        .accordion-button.open + .accordion-content {
+            max-height: 2000px;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        .concept-map-node {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .concept-map-node:hover, .concept-map-node.active {
+            transform: translate(-50%, -50%) scale(1.1);
+            background-color: #7A9D96;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .concept-map-line {
+            position: absolute;
+            background-color: #BDBDBD;
+            transform-origin: 0 0;
+            transition: all 0.3s ease;
+            z-index: 1;
+        }
+        .concept-map-line.highlighted {
+            background-color: #7A9D96;
+            height: 3px !important;
+            z-index: 5;
+        }
+        .highlight-text {
+            background-color: #FDE68A;
+            border-radius: 3px;
+        }
+        .loading {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(122, 157, 150, 0.3);
+            border-radius: 50%;
+            border-top-color: #7A9D96;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-[#434242]">互动式微积分学习指南</h1>
+            <p class="text-lg text-gray-600 mt-2">一个将复杂概念变得清晰易懂的探索工具</p>
+            <div class="mt-4 max-w-xl mx-auto">
+                <input type="text" id="search-bar" placeholder="搜索概念、公式或章节..." class="w-full px-4 py-2 border border-gray-300 rounded-full shadow-sm focus:ring-2 focus:ring-[#7A9D96] focus:border-transparent transition">
+            </div>
+        </header>
+        
+        <div class="grid grid-cols-12 gap-8">
+            <aside class="col-span-12 md:col-span-3">
+                <div class="sticky top-8 bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-sm">
+                    <h2 class="text-xl font-semibold mb-4 text-[#434242]">课程章节</h2>
+                    <nav id="chapter-nav" class="space-y-2">
+                    </nav>
+                </div>
+            </aside>
+
+            <main class="col-span-12 md:col-span-6">
+                <div id="content-area" class="bg-white p-6 md:p-8 rounded-lg shadow-sm min-h-[80vh]">
+                </div>
+            </main>
+
+            <aside class="col-span-12 md:col-span-3">
+                <div class="sticky top-8 space-y-8">
+                    <div class="bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-sm">
+                        <h2 class="text-xl font-semibold mb-2 text-[#434242]">概念关联图</h2>
+                        <p class="text-sm text-gray-500 mb-4">点击或悬停节点以探索章节间的关联。</p>
+                        <div id="concept-map-container" class="relative w-full h-[500px] chart-container max-w-full mx-auto">
+                        </div>
+                    </div>
+                    <div class="bg-white/70 backdrop-blur-sm p-4 rounded-lg shadow-sm">
+                        <h2 class="text-xl font-semibold mb-2 text-[#434242]">公式密度图</h2>
+                        <div class="chart-container relative mx-auto h-[250px] max-h-[300px] w-full max-w-xl">
+                            <canvas id="formulas-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        const calculusData = [
+            { id: 1, title: "函数", summary: "介绍函数的基本概念、图形及其变换。", formulaCount: 5 },
+            { id: 2, title: "极限与连续", summary: "极限是微积分的基石，用于定义连续性与导数。", formulaCount: 8 },
+            { id: 3, title: "导数", summary: "探讨导数的定义、计算规则以及其作为变化率的应用。", formulaCount: 15 },
+            { id: 4, title: "导数的应用", summary: "利用导数解决极值、优化和曲线绘制等问题。", formulaCount: 7 },
+            { id: 5, title: "积分", summary: "介绍定积分与不定积分，以及微积分基本定理。", formulaCount: 10 },
+            { id: 6, title: "定积分的应用", summary: "应用定积分计算面积、体积、弧长等。", formulaCount: 6 },
+            { id: 7, title: "积分与超越函数", summary: "探讨对数、指数及双曲函数的积分。", formulaCount: 4 },
+            { id: 8, title: "积分技巧", summary: "学习分部积分、三角换元等高级积分方法。", formulaCount: 5 },
+            { id: 9, title: "一阶微分方程", summary: "解决一阶线性微分方程及相关应用。", formulaCount: 3 },
+            { id: 10, title: "无穷级数", summary: "探讨序列与级数的收敛性，以及幂级数和泰勒级数。", formulaCount: 12 },
+            { id: 11, title: "参数方程与极坐标", summary: "使用参数和极坐标描述曲线并进行微积分运算。", formulaCount: 7 },
+            { id: 12, title: "向量与空间几何", summary: "介绍三维空间中的向量、点积、叉积、直线与平面。", formulaCount: 9 },
+            { id: 13, title: "向量值函数", summary: "研究空间曲线、运动、曲率等。", formulaCount: 6 },
+            { id: 14, title: "偏导数", summary: "将导数概念推广到多变量函数。", formulaCount: 11 },
+            { id: 15, title: "重积分", summary: "计算二重积分和三重积分，应用于体积和质量计算。", formulaCount: 8 },
+            { id: 16, title: "积分与向量场", summary: "介绍线积分、格林公式、斯托克斯公式和散度定理。", formulaCount: 6 },
+            { id: 17, title: "二阶微分方程", summary: "解决二阶线性微分方程。", formulaCount: 4 }
+        ];
+
+        const fullContent = {
+            1: [
+                { title: '1.1 函数及其图形', content: '<ul><li>**函数定义:** 函数`f`是从集合`D`（定义域）到集合`Y`的规则，为`D`中的每个元素`x`赋予`Y`中唯一的元素`f(x)`。</li><li>**垂直线检验法:** 当且仅当没有垂直线与曲线相交超过一次时，该曲线才是函数图形。</li><li>**对称性:** 偶函数 `f(-x) = f(x)` (关于y轴对称)，奇函数 `f(-x) = -f(x)` (关于原点对称)。</li></ul>' },
+                { title: '1.2-1.6 函数组合与变换', content: '<ul><li>**函数运算:** 函数可以进行加、减、乘、除和复合运算 `(f ∘ g)(x) = f(g(x))`。</li><li>**反函数与对数:** 一对一函数才有反函数 `f⁻¹`。对数函数是指数函数的反函数，例如 `$y = \\log_a(x) \\iff a^y = x$`。</li><li>**对数性质:** `$ \\ln(ab) = \\ln(a) + \\ln(b) $`, `$ \\ln(a/b) = \\ln(a) - \\ln(b) $`</li></ul>' }
+            ],
+            2: [
+                { title: '2.1-2.2 极限', content: '<ul><li>**极限定义:** 描述函数在某点附近值的趋势。是导数和积分的基础。</li><li>**夹挤定理:** 若`g(x) ≤ f(x) ≤ h(x)`且`lim g(x) = lim h(x) = L`，则`lim f(x) = L`。</li></ul>' },
+                { title: '2.3-2.5 连续性', content: '<ul><li>**连续性:** 若 `$\\lim_{x \\to c} f(x) = f(c)$`，则函数`f`在点`c`处连续。</li><li>**介值定理:** 若`f`在闭区间`[a,b]`上连续，则`f`会取到`f(a)`和`f(b)`之间的每一个值。</li></ul>' }
+            ],
+            3: [
+                { title: '3.1-3.2 导数定义', content: '<ul><li>**定义:** `$$ f\'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h} $$`</li><li>**意义:** 导数表示函数图形在某点的切线斜率，或瞬时变化率。</li></ul>' },
+                { title: '3.3-3.9 微分法则', content: '<ul><li>**基本法则:** 幂次法则、乘积法则 `$(fg)\' = f\'g + fg\'$`、商法则 `$(f/g)\' = (f\'g - fg\') / g²$`。</li><li>**链式法则:** `$(f(g(x)))\' = f\'(g(x))g\'(x)$`。</li><li>**常见函数导数:** `$ \\frac{d}{dx}(\\sin x) = \\cos x $`, `$ \\frac{d}{dx}(e^x) = e^x $`, `$ \\frac{d}{dx}(\\ln x) = 1/x $`。</li></ul>' }
+            ],
+            4: [
+                { title: '4.1-4.4 极值、单调性与凹性', content: '<ul><li>**极值:** 发生在临界点（`f\'(x)=0`或不存在）或端点。</li><li>**一阶导数检验:** 判断增减性与局部极值。</li><li>**二阶导数检验:** 判断凹性（`f\'\' > 0`凹向上，`f\'\' < 0`凹向下）与局部极值。</li></ul>'},
+                { title: '4.5 洛必达法则', content: '用于解决 `0/0` 或 `∞/∞` 型未定式的极限。`$\\lim \\frac{f(x)}{g(x)} = \\lim \\frac{f\'(x)}{g\'(x)}$`'}
+            ],
+            5: [
+                 { title: '5.1-5.4 定积分与微积分基本定理', content: '<ul><li>**定积分 (黎曼和):** `$$ \\int_a^b f(x) \\,dx = \\lim_{n \\to \\infty} \\sum_{k=1}^n f(c_k) \\Delta x $$`</li><li>**微积分基本定理(FTC):** 连接了微分与积分。Part 1: `$\\frac{d}{dx} \\int_a^x f(t) dt = f(x)$`。Part 2: `$$ \\int_a^b f(x) \\,dx = F(b) - F(a) $$`</li></ul>' },
+                 { title: '5.5-5.6 换元法与曲线间面积', content: '<ul><li>**换元法 (u-substitution):** 积分中的链式法则逆运算。</li><li>**曲线间面积:** `$$ A = \\int_a^b (f_{top}(x) - f_{bottom}(x)) \\,dx $$`</li></ul>' }
+            ],
+            6: [
+                { title: '6.1-6.2 体积', content: '<ul><li>**截面法:** `V = ∫[a,b] A(x) dx`，其中A(x)是垂直于x轴的截面面积。</li><li>**圆盘法:** `V = ∫[a,b] π[R(x)]² dx`。</li><li>**圆环法:** `V = ∫[a,b] π([R(x)]² - [r(x)]²) dx`。</li><li>**壳层法:** `V = ∫[a,b] 2π * (壳半径) * (壳高度) dx`。</li></ul>' },
+                { title: '6.3-6.4 弧长与表面积', content: '<ul><li>**弧长:** `L = ∫[a,b] √(1 + [f\'(x)]²) dx`。</li><li>**旋转体表面积:** `S = ∫[a,b] 2πf(x)√(1 + [f\'(x)]²) dx`（绕x轴旋转）。</li></ul>' }
+            ],
+            7: [
+                { title: '7.1 对数作为积分', content: '自然对数的积分定义：`$$ \\ln x = \\int_1^x \\frac{1}{t} dt, x > 0 $$`' },
+                { title: '7.2-7.3 指数变化与双曲函数', content: '<ul><li>**指数变化:** 方程 `dy/dt = ky` 的解为 `y = y₀e^(kt)`。</li><li>**双曲函数:** `sinh x = (e^x - e^(-x)) / 2`, `cosh x = (e^x + e^(-x)) / 2`。</li></ul>' }
+            ],
+            8: [
+                { title: '8.2 分部积分', content: '<ul><li>**公式:** `$$ \\int u \\,dv = uv - \\int v \\,du $$`</li><li>**选择u的策略:** 对数(L)、反三角(I)、代数(A)、三角(T)、指数(E) (LIATE)。</li></ul>' },
+                { title: '8.3-8.5 三角换元与部分分式', content: '<ul><li>**三角换元:** 用于含有`√(a²-x²)`, `√(a²+x²)`或`√(x²-a²)`的积分。</li><li>**部分分式:** 将有理函数分解为更简单的分式之和以便积分。</li></ul>' }
+            ],
+            9: [
+                { title: '9.1-9.2 一阶线性微分方程', content: '<ul><li>**标准形式:** `dy/dx + P(x)y = Q(x)`。</li><li>**积分因子法:** 计算积分因子 `v(x) = e^(∫P(x)dx)`，然后求解。</li></ul>' },
+                { title: '9.4 自治方程', content: '<ul><li>**自治方程:** `dy/dx = f(y)`。</li><li>**平衡点:** `f(y) = 0` 的值，代表常数解。</li><li>**稳定性:** 平衡点可以是稳定的、不稳定的或半稳定的。</li></ul>' }
+            ],
+            10: [
+                { title: '10.1-10.2 序列与级数', content: '<ul><li>**序列:** 有序数列，如果 `lim(n→∞) aₙ = L`，则序列收敛于L。</li><li>**级数:** 序列的和，如果部分和序列收敛，则级数收敛。</li><li>**几何级数:** `Σarⁿ`，当`|r| < 1`时收敛于`a/(1-r)`。</li></ul>' },
+                { title: '10.3-10.6 收敛判别法', content: '<ul><li>**n项判别法:** 如果 `lim(n→∞) aₙ ≠ 0`，级数发散。</li><li>**比值判别法与根值判别法:** 计算极限 `ρ`，若 `ρ<1` 收敛，`ρ>1` 发散，`ρ=1` 不定。</li></ul>' },
+                { title: '10.7-10.8 泰勒级数', content: '<ul><li>**泰勒级数:** `$$ f(x) = \\sum_{n=0}^{\\infty} \\frac{f^{(n)}(a)}{n!}(x-a)^n $$`</li></ul>' }
+            ],
+            11: [
+                { title: '11.1-11.2 参数曲线', content: '<ul><li>**参数方程:** `x = f(t), y = g(t)`。</li><li>**导数:** `dy/dx = (dy/dt) / (dx/dt)`。</li><li>**弧长:** `L = ∫[α,β] √((dx/dt)² + (dy/dt)²) dt`。</li></ul>' },
+                { title: '11.3-11.5 极坐标', content: '<ul><li>**坐标转换:** `x = r cos(θ), y = r sin(θ)`。</li><li>**极坐标面积:** `A = ∫[α,β] (1/2)r² dθ`。</li></ul>' }
+            ],
+            12: [
+                { title: '12.1-12.2 向量', content: '<ul><li>**向量:** 具有大小和方向的量，在3D中表示为`v = <v₁, v₂, v₃>`。</li><li>**模长:** `|v| = √(v₁² + v₂² + v₃²)`。</li></ul>' },
+                { title: '12.3-12.4 点积与叉积', content: '<ul><li>**点积:** `u · v = |u||v|cos(θ)`。若`u · v = 0`则向量正交。</li><li>**叉积:** `u × v`是同时垂直于`u`和`v`的向量，其模长等于以`u`,`v`为边的平行四边形面积。</li></ul>' }
+            ],
+            13: [
+                { title: '13.1-13.2 位置、速度与加速度', content: '<ul><li>**位置向量:** `r(t) = <f(t), g(t), h(t)>`。</li><li>**速度向量:** `v(t) = r\'(t)`。</li><li>**加速度向量:** `a(t) = v\'(t)`。</li></ul>' },
+                { title: '13.3-13.5 弧长与曲率', content: '<ul><li>**弧长:** `L = ∫[a,b] |v(t)| dt`。</li><li>**曲率 (κ):** 衡量曲线弯曲程度。</li><li>**加速度分解:** `a = a_T T + a_N N`。</li></ul>' }
+            ],
+            14: [
+                { title: '14.1-14.3 多元函数与偏导数', content: '<ul><li>**偏导数:** 对`x`的偏导`∂f/∂x`是在保持其他变量不变时对`x`的导数。</li><li>**混合导数定理:** 若`f_xy`和`f_yx`连续，则`f_xy = f_yx`。</li></ul>' },
+                { title: '14.4-14.8 链式法则与极值', content: '<ul><li>**梯度:** `∇f`指向函数增长最快的方向。</li><li>**方向导数:** `D_u f = ∇f ⋅ u`。</li><li>**拉格朗日乘数法:** 用于带约束的极值问题。</li></ul>' }
+            ],
+            15: [
+                { title: '15.1-15.4 二重积分', content: '<ul><li>**二重积分:** `∬_R f(x, y) dA`，计算曲面下的体积。</li><li>**极坐标形式:** `∬_R f(r,θ) r dr dθ`。</li></ul>' },
+                { title: '15.5-15.7 三重积分', content: '<ul><li>**柱坐标:** `(r, θ, z)`，`dV = r dz dr dθ`。</li><li>**球坐标:** `(ρ, φ, θ)`，`dV = ρ² sin(φ) dρ dφ dθ`。</li></ul>' }
+            ],
+            16: [
+                { title: '16.1-16.3 线积分与向量场', content: '<ul><li>**线积分:** `∫_C F · dr`，计算向量场沿曲线所做的功。</li><li>**保守场:** 若`F = ∇f`，则线积分与路径无关。</li></ul>' },
+                { title: '16.4-16.8 向量微积分基本定理', content: '<ul><li>**格林公式:** `∮_C M dx + N dy = ∬_D (∂N/∂x - ∂M/∂y) dA`。</li><li>**斯托克斯公式:** `∬_S (∇ × F) · n dσ = ∮_C F · dr`。</li><li>**散度定理:** `∭_D (∇ · F) dV = ∬_S F · n dσ`。</li></ul>' }
+            ],
+            17: [
+                { title: '17.1-17.2 二阶线性微分方程', content: '<ul><li>**齐次方程:** `a y\'\' + b y\' + c y = 0`，通过特征方程 `ar² + br + c = 0` 求解。</li><li>**非齐次方程:** 通解为 `y = y_c + y_p`。</li></ul>' }
+            ]
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const nav = document.getElementById('chapter-nav');
+            const contentArea = document.getElementById('content-area');
+            const searchBar = document.getElementById('search-bar');
+            const mapContainer = document.getElementById('concept-map-container');
+
+            let isLoading = false;
+            let originalAccordionContent = {};
+
+            calculusData.forEach(chapter => {
+                const link = document.createElement('a');
+                link.href = '#';
+                link.textContent = `${chapter.id}. ${chapter.title}`;
+                link.className = 'block px-4 py-2 rounded-md transition-all duration-300 hover:bg-gray-200';
+                link.dataset.chapterId = chapter.id;
+                nav.appendChild(link);
+            });
+            
+            nav.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const targetLink = e.target.closest('a');
+                if (targetLink && !isLoading) {
+                    const chapterId = targetLink.dataset.chapterId;
+                    await loadChapter(chapterId);
+                }
+            });
+
+            async function loadChapter(id) {
+                isLoading = true;
+                contentArea.innerHTML = '<div class="flex justify-center items-center h-40"><div class="loading"></div></div>';
+                
+                document.querySelectorAll('#chapter-nav a').forEach(a => a.classList.remove('active-nav'));
+                const activeLink = document.querySelector(`#chapter-nav a[data-chapter-id='${id}']`);
+                if (activeLink) activeLink.classList.add('active-nav');
+                
+                highlightMapNode(id);
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                try {
+                    await displayChapter(id);
+                } catch (error) {
+                    console.error('加载章节时出错:', error);
+                    contentArea.innerHTML = '<div class="p-4 text-red-500">加载章节时出错，请稍后重试。</div>';
+                } finally {
+                    isLoading = false;
+                }
+            }
+
+            async function displayChapter(id) {
+                const chapter = calculusData.find(c => c.id == id);
+                const chapterContent = fullContent[id] || [{title: '详细内容待补充', content: '该章节的详细笔记正在整理中...'}];
+                
+                let html = `<h2 class="text-3xl font-bold mb-2 text-[#434242]">${chapter.id}. ${chapter.title}</h2>`;
+                html += `<p class="text-gray-600 mb-6">${chapter.summary}</p>`;
+                
+                chapterContent.forEach((section, index) => {
+                    html += `
+                        <div class="border-t border-gray-200">
+                            <button class="accordion-button w-full text-left py-4 px-2 flex justify-between items-center text-lg font-semibold hover:bg-gray-50 transition" data-index="${index}" aria-expanded="false">
+                                <span>${section.title}</span>
+                                <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div class="accordion-content px-4 text-gray-700 leading-relaxed">${section.content}</div>
+                        </div>
+                    `;
+                });
+                
+                contentArea.innerHTML = html;
+                
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                   await window.MathJax.typesetPromise([contentArea]);
+                }
+                originalAccordionContent = {};
+            }
+            
+            contentArea.addEventListener('click', (e) => {
+                const button = e.target.closest('.accordion-button');
+                if (button) {
+                    const isOpening = !button.classList.contains('open');
+                    button.classList.toggle('open');
+                    button.setAttribute('aria-expanded', isOpening);
+                    const icon = button.querySelector('svg');
+                    icon.style.transform = isOpening ? 'rotate(180deg)' : 'rotate(0deg)';
+                }
+            });
+
+            let searchTimeout;
+            searchBar.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    performSearch(e.target.value.toLowerCase());
+                }, 300);
+            });
+
+            function performSearch(term) {
+                const contentDivs = contentArea.querySelectorAll('.accordion-content');
+                if (Object.keys(originalAccordionContent).length === 0) {
+                     contentDivs.forEach((el, i) => { originalAccordionContent[i] = el.innerHTML; });
+                }
+
+                if (!term) {
+                    contentDivs.forEach((el, i) => { 
+                        if(originalAccordionContent[i]) el.innerHTML = originalAccordionContent[i];
+                        const button = el.previousElementSibling;
+                        button.classList.remove('open');
+                        button.setAttribute('aria-expanded', 'false');
+                        button.querySelector('svg').style.transform = 'rotate(0deg)';
+                    });
+                    return;
+                }
+                
+                contentDivs.forEach((el, i) => {
+                    let content = originalAccordionContent[i];
+                    const button = el.previousElementSibling;
+                    const title = button.querySelector('span').textContent.toLowerCase();
+
+                    if (content.toLowerCase().includes(term) || title.includes(term)) {
+                        const regex = new RegExp(`(${term.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+                        el.innerHTML = content.replace(regex, `<span class="highlight-text">$1</span>`);
+                        if (!button.classList.contains('open')) {
+                           button.click();
+                        }
+                    } else {
+                        el.innerHTML = content;
+                        if (button.classList.contains('open')) {
+                           button.click();
+                        }
+                    }
+                });
+            }
+
+            function drawConceptMap() {
+                 const nodes = [
+                    { id: 1, x: 5, y: 50, label: '1.函数' },
+                    { id: 2, x: 15, y: 25, label: '2.极限' },
+                    { id: 3, x: 30, y: 25, label: '3.导数' },
+                    { id: 4, x: 30, y: 60, label: '4.导数应用' },
+                    { id: 5, x: 48, y: 25, label: '5.积分' },
+                    { id: 8, x: 48, y: 50, label: '8.积分技巧' },
+                    { id: 6, x: 48, y: 75, label: '6.积分应用' },
+                    { id: 7, x: 48, y: 5, label: '7.超越函数' },
+                    { id: 10, x: 65, y: 25, label: '10.级数' },
+                    { id: 9, x: 65, y: 65, label: '9.一阶微分' },
+                    { id: 17, x: 65, y: 90, label: '17.二阶微分' },
+                    { id: 11, x: 80, y: 5, label: '11.参数/极坐标' },
+                    { id: 12, x: 80, y: 35, label: '12.向量' },
+                    { id: 13, x: 80, y: 65, label: '13.向量函数' },
+                    { id: 14, x: 95, y: 25, label: '14.偏导' },
+                    { id: 15, x: 95, y: 50, label: '15.重积分' },
+                    { id: 16, x: 95, y: 75, label: '16.向量积分' }
+                ];
+                const connections = [
+                    { from: 1, to: 2 }, { from: 1, to: 3 }, { from: 2, to: 3 }, { from: 3, to: 4 },
+                    { from: 3, to: 5 }, { from: 2, to: 5 }, { from: 5, to: 6 }, { from: 5, to: 8 },
+                    { from: 5, to: 7 }, { from: 3, to: 9 }, { from: 9, to: 17 }, { from: 5, to: 10 },
+                    { from: 3, to: 10 }, { from: 3, to: 11 }, { from: 5, to: 11 }, { from: 12, to: 13 },
+                    { from: 12, to: 14 }, { from: 3, to: 14 }, { from: 14, to: 15 }, { from: 15, to: 16 },
+                    { from: 12, to: 16 }, { from: 13, to: 16 }
+                ];
+
+                mapContainer.innerHTML = '';
+
+                const createLine = (x1, y1, x2, y2, fromId, toId) => {
+                    const length = Math.sqrt(((x2 - x1) * mapContainer.offsetWidth / 100) ** 2 + ((y2 - y1) * mapContainer.offsetHeight / 100) ** 2);
+                    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+                    const line = document.createElement('div');
+                    line.className = 'concept-map-line';
+                    line.style.width = `${length}px`;
+                    line.style.height = '2px';
+                    line.style.left = `${x1}%`;
+                    line.style.top = `${y1}%`;
+                    line.style.transform = `rotate(${angle}deg)`;
+                    line.dataset.from = fromId;
+                    line.dataset.to = toId;
+                    return line;
+                };
+
+                connections.forEach(conn => {
+                    const fromNode = nodes.find(n => n.id === conn.from);
+                    const toNode = nodes.find(n => n.id === conn.to);
+                    if(fromNode && toNode) mapContainer.appendChild(createLine(fromNode.x, fromNode.y, toNode.x, toNode.y, conn.from, conn.to));
+                });
+                
+                nodes.forEach(node => {
+                    const div = document.createElement('div');
+                    div.className = 'concept-map-node absolute bg-white/80 border border-gray-300 rounded-lg flex items-center justify-center p-1 text-xs text-center shadow-md';
+                    div.style.left = `${node.x}%`;
+                    div.style.top = `${node.y}%`;
+                    div.style.transform = 'translate(-50%, -50%)';
+                    div.style.width = '70px';
+                    div.style.height = '45px';
+                    div.textContent = node.label;
+                    div.dataset.nodeId = node.id;
+                    mapContainer.appendChild(div);
+                });
+
+                mapContainer.addEventListener('mouseover', (e) => {
+                    const node = e.target.closest('.concept-map-node');
+                    if (node) {
+                        const nodeId = node.dataset.nodeId;
+                        document.querySelectorAll('.concept-map-line').forEach(line => {
+                            if (line.dataset.from === nodeId || line.dataset.to === nodeId) {
+                                line.classList.add('highlighted');
+                            }
+                        });
+                    }
+                });
+            
+                mapContainer.addEventListener('mouseout', (e) => {
+                    const node = e.target.closest('.concept-map-node');
+                    if(node){
+                       document.querySelectorAll('.concept-map-line').forEach(line => line.classList.remove('highlighted'));
+                    }
+                });
+
+                mapContainer.addEventListener('click', (e) => {
+                    const node = e.target.closest('.concept-map-node');
+                    if (node) {
+                        loadChapter(node.dataset.nodeId);
+                    }
+                });
+            }
+
+            function highlightMapNode(nodeId) {
+                document.querySelectorAll('.concept-map-node').forEach(n => n.classList.remove('active'));
+                const activeNode = document.querySelector(`.concept-map-node[data-node-id='${nodeId}']`);
+                if (activeNode) activeNode.classList.add('active');
+            }
+
+            function drawFormulasChart() {
+                const ctx = document.getElementById('formulas-chart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: calculusData.map(c => `Ch ${c.id}`),
+                        datasets: [{
+                            label: '关键公式数量',
+                            data: calculusData.map(c => c.formulaCount),
+                            backgroundColor: 'rgba(122, 157, 150, 0.6)',
+                            borderColor: 'rgba(122, 157, 150, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    title: (context) => `第${calculusData[context[0].dataIndex].id}章: ${calculusData[context[0].dataIndex].title}`
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(drawConceptMap, 200);
+            });
+
+            // Initial load
+            drawConceptMap();
+            drawFormulasChart();
+            loadChapter(1);
+        });
+    </script>
+</body>
+</html>
